@@ -1,96 +1,106 @@
-# m = mass in kg
-# g = acceleration due to gravity in m/s^2
-# forceThrust = force due to thrust in N
-# forceGravity = force due to gravity in N
-# h0 = initial height in m
-# vel0 = initial velocity in m/s
-# accel0 = initial acceleration in m/s^2 (before thrust becomes 0)
-# hs = an array holding instantaneous heights in m
-# vels = an array holding instantaneous velocities in m/s
-# accels = an array holding instantaneous accelerations in m/s^2
-# masses = an array holding instantaneous masses in kg
-# ts = an array of time in s
-# velFinalWithThrust = final velocity when thrust is present in m/s
-# deltaYAscendWithThrust = change in heights when thrust is present in m
-# deltaY = change in total height in m
-# velFinalWithoutThrust = final velocity when the rocket reaches the ground in m/s
-# timeWithoutThrustDescend = time when the rocket is descending in s
-# timeWithoutThrust = total time without thurst in s
-# totalTime = total time for the whole trajectory in s
-
+import math
 import matplotlib.pyplot as plt
-import numpy as np
-
-m = 1
-g = -10
-forceGravity = m * g
-forceThrust = 15 # able to modify
-initialForce = forceGravity + forceThrust
-deltaT = 0.05
-
-timeWithThrust = 3
-
-h0 = 0
-vel0 = 0
-accel0 = initialForce / m
-
-hs = []
-vels = []
-accels = []
-masses = []
-time = []
-
-hs.append(h0)
-vels.append(vel0)
-accels.append(accel0)
-masses.append(m)
-time.append(0)
-
-velFinalWithThrust = timeWithThrust * accel0
-deltaYAscendWithThrust = (vel0 + velFinalWithThrust) / 2 * timeWithThrust
-
-timeWithoutThrustAscend = (0 - velFinalWithThrust) / g
-deltaYAscendWithoutThrust = (0 + velFinalWithThrust) / 2 * timeWithoutThrustAscend
-deltaY = deltaYAscendWithThrust + deltaYAscendWithoutThrust
-velFinalWithoutThrust = -np.sqrt(2 * np.abs(g) * deltaY)
-
-timeWithoutThrustDescend = np.sqrt(deltaY * 2 / np.abs(g))
-timeWithoutThrust = timeWithoutThrustAscend + timeWithoutThrustDescend
-
-totalTime = int(round(timeWithThrust + timeWithoutThrust))
-
-def graph(totalTime, deltaYAscendWithThrust, deltaY):
-    for timeStep in range(1, int(totalTime/deltaT + 1)):
-        time.append(timeStep * deltaT)
-        if time[timeStep] <= timeWithThrust:
-            accels.append(accel0)
-            vels.append(vels[timeStep - 1] + accels[timeStep])
-            hs.append(hs[timeStep - 1] + vels[timeStep])
-            #hs.append(vels[i] / 2 * i)
-        elif time[timeStep] <= timeWithThrust + timeWithoutThrustAscend:
-            accels.append(g)
-            vels.append(vels[timeStep - 1] + accels[timeStep])
-            hs.append(hs[timeStep - 1] + vels[timeStep])
-            #hs.append(deltaYAscendWithThrust + vels[i] / 2 * (i - timeWithThrust))
-        else:
-            accels.append(g)
-            vels.append(vels[timeStep - 1] + accels[timeStep])
-            hs.append(hs[timeStep - 1] + vels[timeStep])
-            #hs.append(deltaY + (vels[i]) / 2 * (i - timeWithThrust - timeWithoutThrustAscend))
-
-    plt.scatter(time, hs)
-    plt.xlabel("time")
-    plt.ylabel("heights")
-    plt.show()
-    plt.scatter(time, vels)
-    plt.xlabel("time")
-    plt.ylabel("velocities")
-    plt.show()
-    plt.scatter(time, accels)
-    plt.xlabel("time")
-    plt.ylabel("accelerations")
-    plt.show()
-
-graph(totalTime, deltaYAscendWithThrust, deltaY)
-
-
+# constants
+g = 9.81 # acceleration due to gravity in m/s^2
+Rdry = 287.058 # specific gas constant for dry air in J/(kg * K)
+Rv = 461.495 # specific gas constant for water vapor in J/(kg * K)
+CConstant = 273.15
+Cv = 0.97 # the velocity coefficient
+rhoWater = 1000 # water density in kg/m^3
+Pbaro = 10000 # current barometric pressure in pascals
+Cc = 0.9 # contraction coefficient
+# inputs
+Ft = 15 # force due to thrust in N
+temp = 20 + 273.15 # temperature in Kelvin (ambient air)
+phi = 0.5 # relative humidity
+Af = math.pi * (0.54 ** 2) # frontal area of the rocket in m^2
+Av = math.pi * (0.25 ** 2) # area of bottle neck opening
+Cd = 0.295 # coefficient of drag
+deltaT = 0.005 # instant change in time
+# calculations regarding the environment
+Psat = 0.61121 * (math.e ** ((18.678 - ((temp - CConstant) / 234.5)) * ((temp - CConstant) / (257.14 + temp - CConstant)))) # saturation vapor pressure of water (Arden Buck Equation)
+rhoA = ((Pbaro - phi * Psat) / (Rdry * temp)) + ((phi * Psat) / (Rv * temp)) # air density in kg/m^3
+# initial values
+initialM = 1 # mass in kg
+initialVel = 0 # initial velocity of rocket in m/s
+initialFd = 0.5 * rhoA * (initialVel ** 2) * Cd * Af # force drag against motion due to air resistance in N
+initialForce = Ft - initialM * g + initialFd
+initialAccel = initialForce / initialM
+initialG = g + initialAccel
+initialH = 0.25 # the height of water above the nozzle opening
+initialP = 3500000 - Pbaro # the excess pressure in the tank above ambient pressure in Pa
+mPrime = Cc * rhoWater * Av # assume constant
+initialVWater = Cv * math.sqrt(2 * ((initialG * initialH) + (initialP / rhoWater))) # velocity of the water from the nozzle in m/s
+#initializing lists
+times = [] # a list containing all the time steps
+accels = [] # a list containing all the accelerations
+vels = [] # a list containing all the velocities
+alts = [] # a list containing all the altitudes
+Gs = [] # a list containing all the Gs (total acceleration)
+Hs = [] # a list containing all the Hs
+Fds = [] # a list containing all the Fds
+masses = [] # a list containing all the masses
+forces = [] # a list containing all the forces
+ps = [] # a list containing all the excess pressures
+Fts = [] # a list containing all the force of thrust
+# append initial values
+times.append(0)
+accels.append(initialAccel)
+vels.append(0)
+alts.append(0)
+Gs.append(initialG)
+Hs.append(initialH)
+Fds.append(initialFd)
+masses.append(initialM)
+forces.append(initialForce)
+ps.append(initialP)
+Fts.append(Ft)
+def graph(deltaT):
+  i = 0
+  instantAlt = alts[i]
+ 
+  while instantAlt >= 0:
+      times.append(times[i] + deltaT)
+      newMass = masses[i] - mPrime * deltaT
+      if newMass > 0:
+           masses.append(newMass)
+      else:
+           masses.append(0.01)
+ 
+      vels.append(vels[i] + (accels[i] * deltaT))
+      alts.append(alts[i] + vels[i] * times[i + 1] + 0.5 * accels[i] * (deltaT ** 2))
+      Fds.append(0.5 * rhoA * vels[i + 1] * (vels[i + 1] ** 2) * Cd * Af)
+      #Fts.append(masses[i + 1] * vels[i + 1] - masses[i] * vels[i])
+ 
+      if vels[i + 1] > 0:
+           forces.append(Ft - masses[i] * g - Fds[i])
+      else:
+           forces.append(Ft - masses[i] * g + Fds[i])
+ 
+      accels.append(forces[i + 1] / masses[i + 1])
+      ps.append(forces[i + 1] / (math.pi * (0.25 ** 2)))
+      Fts.append(ps[i + 1] * (math.pi * (0.25 ** 2)))
+      i = i + 1
+      instantAlt = alts[i]
+  print(times)
+  print(alts)
+  print(vels)
+  print(accels)
+  print(Fds)
+  print(masses)
+  print(forces)
+  plt.scatter(times, alts)
+  plt.xlabel("time (s)")
+  plt.ylabel("altitudes (m)")
+  plt.show()
+  plt.scatter(times, vels)
+  plt.xlabel("time (s)")
+  plt.ylabel("velocities (m/s)")
+  plt.show()
+  plt.scatter(times, accels)
+  plt.xlabel("time (s)")
+  plt.ylabel("accelerations (m/s^2)")
+  plt.show()
+ 
+graph(deltaT)
+# does not reach a uniform end time with different deltaT
